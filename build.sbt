@@ -2,13 +2,13 @@ name := "dependencies"
 
 version := "1.0"
 
-scalaVersion := "2.10.2"
+scalaVersion := "2.11.6"
 
-seq(com.github.retronym.SbtOneJar.oneJarSettings: _*)
+Seq(com.github.retronym.SbtOneJar.oneJarSettings: _*)
 
 libraryDependencies ++= Seq(
 	"commons-lang" % "commons-lang" % "2.6",
-	"com.google.guava" % "guava" % "16.0.1"
+	"com.google.guava" % "guava" % "23.0"
 )
 
 mainClass in oneJar := Some("dependencies.CLI")
