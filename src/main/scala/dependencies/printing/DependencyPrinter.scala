@@ -102,7 +102,7 @@ final case class BazelPrinter(w: PrintWriter) extends DependencyPrinter(w) {
   private def thirdPartyDotBzl(mavenDependencies: MavenDependencies) = {
     w.println(
       s"""
-         |# Designed to be executed this within your module's WORKSPACE file, like:
+         |# `generated_maven_jars()` is designed to be executed this within your module's WORKSPACE file, like:
          |#
          |#     load("//:third_party.bzl", "generated_maven_jars")
          |#     generated_maven_jars()
@@ -123,7 +123,10 @@ final case class BazelPrinter(w: PrintWriter) extends DependencyPrinter(w) {
 
     w.println(
       s"""
-         |# This will be executed within `third_party/BUILD`
+         |# `generated_java_libraries()` is designed to be executed within `third_party/BUILD`
+         |#
+         |#     load("//:third_party.bzl", "generated_java_libraries")
+         |#     generated_java_libraries()
          |
          |def generated_java_libraries():
          |""".stripMargin
