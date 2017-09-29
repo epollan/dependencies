@@ -16,10 +16,10 @@ object CLI extends App {
   private val arg = new AtomicInteger(0)
 
   private def usage() {
-    println("Usage: <dependency list command> | java -jar target/scala-2.10/*one-jar.jar [options]")
-    println(s"  --max-depth/-d                   max dependency 'depth', defaults to $maxDepth")
-    println(s"  --configuration/-c               specific configuration from which dependencies should be taken")
-    println(s"  --format/-f (gradle|maven)       dependency listing format, defaults to gradle")
+    println("Usage: <dependency list command> | java -jar target/scala-2.11/*one-jar.jar [options]")
+    println(s"  --max-depth/-d                             max dependency 'depth', defaults to $maxDepth")
+    println(s"  --configuration/-c                         specific configuration from which dependencies should be taken")
+    println(s"  --format/-f (gradle|maven)                 dependency listing format, defaults to gradle")
     println(s"  --output/-o (csv|confluence|raw|bzl|bazel) output format, defaults to 'raw'")
     sys.exit(1)
   }

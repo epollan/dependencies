@@ -131,8 +131,9 @@ final case class BazelPrinter(w: PrintWriter) extends DependencyPrinter(w) {
          |def generated_java_libraries():
          |""".stripMargin
     )
-    mavenDependencies.all.foreach(root => {
-      val name = bazelName(root)
+
+    def nativeJavaLibrary(mavenDependency: MavenDependency) = {
+      val name = bazelName(mavenDependency)
       w.println(
         s"""  native.java_library(
            |      name = "$name",
@@ -144,7 +145,7 @@ final case class BazelPrinter(w: PrintWriter) extends DependencyPrinter(w) {
       def dependencyNames(mavenDependency: MavenDependency): Set[String] =
         Set(bazelName(mavenDependency)) ++ mavenDependency.dependsOn.flatMap(dependencyNames)
 
-      root.dependsOn
+      mavenDependency.dependsOn
           .flatMap(dependencyNames)
           .foreach(dependencyName => w.println(s"""          ":$dependencyName","""))
 
@@ -153,7 +154,16 @@ final case class BazelPrinter(w: PrintWriter) extends DependencyPrinter(w) {
            |  )
            |""".stripMargin
       )
-    })
+    }
+
+    // Spit out "leaves" first
+    mavenDependencies.all
+        .filter(_.dependsOn.isEmpty)
+        .foreach(nativeJavaLibrary)
+
+    mavenDependencies.all
+        .filter(_.dependsOn.nonEmpty)
+        .foreach(nativeJavaLibrary)
   }
   
 
