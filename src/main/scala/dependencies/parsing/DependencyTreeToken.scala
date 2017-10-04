@@ -45,10 +45,12 @@ object Dependency {
 
 abstract class Dependency(val configuration: Configuration,
                           val depth: Int,
+                          // naive dependency modeling that's suitable for a single streaming pass through a
+                          // tree rendering wherein dependents are printed prior to their dependencies
                           val neededBy: Option[Dependency],
                           val coordinates: ArtifactCoordinates)
     extends DependencyTreeToken with Ordered[Dependency] {
-  
+
   val name: String = coordinates.toString
 
   override def compare(that: Dependency): Int = ComparisonChain.start()
@@ -86,6 +88,5 @@ final case class ArtifactDependency(override val configuration: Configuration,
                                     group: String,
                                     artifact: String,
                                     version: String,
-                                    // naive dependency modeling that's suitable for a single streaming pass through a tree rendering
                                     override val neededBy: Option[Dependency])
     extends Dependency(configuration, depth, neededBy, MavenArtifactCoordinates(group, artifact, version))
