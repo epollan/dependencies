@@ -1,0 +1,18 @@
+allprojects {
+  repositories {
+    maven {
+      name "Spredfast"
+      url "https://buildrepo.sf-ops.net/artifactory/sf-repo"
+      credentials {
+        username project.ext['spredfastRepoUsername']
+        password project.ext['spredfastRepoPassword']
+      }
+    }
+    mavenLocal()
+  }
+  apply plugin: 'java'
+}
+
+subprojects {
+  task allDeps(type: DependencyReportTask) {}
+}
