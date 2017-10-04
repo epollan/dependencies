@@ -1,0 +1,5 @@
+description = 'This is project C'
+dependencies {
+  compile project(':b')
+  compile 'org.apache.commons:commons-lang3:3.0.1'
+}

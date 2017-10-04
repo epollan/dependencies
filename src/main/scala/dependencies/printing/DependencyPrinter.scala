@@ -2,8 +2,9 @@ package dependencies.printing
 
 import java.io.PrintWriter
 
-import dependencies.{MavenDependencies, MavenDependency}
-import dependencies.parsing.Dependency
+import dependencies.ModelFactory
+import dependencies.model.{MavenArtifactCoordinates, MavenDependencies, MavenDependency, ProjectCoordinates}
+import dependencies.parsing.{ArtifactDependency, Dependency}
 
 import scala.collection.mutable
 
@@ -12,11 +13,16 @@ abstract class DependencyPrinter(w: PrintWriter) {
   def print(d: Dependency): Unit
   def close(): Unit = w.close()
 
-  protected def versionDetailsUrl(d: Dependency): String =
-    s"http://search.maven.org/#artifactdetails%7C${d.group}%7C${d.artifact}%7C${d.version}%7Cjar"
+  protected def versionDetailsUrl(d: Dependency): String = d match {
+    case a: ArtifactDependency =>
+      s"http://search.maven.org/#artifactdetails%7C${a.group}%7C${a.artifact}%7C${a.version}%7Cjar"
+    case _ => ""
+  }
 
-  protected def artifactVersionsUrl(d: Dependency): String =
-    s"http://search.maven.org/#search%7Cgav%7C1%7Cg%3A%22${d.group}%22%20AND%20a%3A%22${d.artifact}%22"
+  protected def artifactVersionsUrl(d: Dependency): String = d match {
+    case a: ArtifactDependency => s"http://search.maven.org/#search%7Cgav%7C1%7Cg%3A%22${a.group}%22%20AND%20a%3A%22${a.artifact}%22"
+    case _ => ""
+  }
 }
 
 /**
@@ -51,7 +57,7 @@ final case class BazelPrinter(w: PrintWriter) extends DependencyPrinter(w) {
   override def print(d: Dependency): Unit = dependencies.+=(d)
 
   override def close(): Unit = {
-    val mavenDependencies = new MavenDependencies(dependencies)
+    val mavenDependencies = ModelFactory.forParseResult(dependencies)
 
     w.println("#######################")
     w.println("# Generated and designed to be cat'ed into <root>/third_party.bzl")
@@ -79,27 +85,36 @@ final case class BazelPrinter(w: PrintWriter) extends DependencyPrinter(w) {
       """.stripMargin
     )
 
-    System.err.println(
-      """#######################
-        |# Copy the following snippet into your java_binary/java_library `deps` section in its BUILD file:
-        |#######################
-        |
-        |java_library(
-        |    ...,
-        |    deps: [""".stripMargin
-    )
-    mavenDependencies.roots.map(bazelName).foreach(root => {
-      System.err.println(s"""        "//third_party:$root",""")
-    })
-    System.err.println(
-      """    ]
-        |)
-        |""".stripMargin
-    )
+    mavenDependencies.roots.toSeq
+        .sortBy { case (project: ProjectCoordinates, _: Set[MavenDependency]) => project.name }
+        .foreach { case (project: ProjectCoordinates, deps: Set[MavenDependency]) =>
+          System.err.println(
+            s"""#######################
+               |# Copy the following snippet into any applicable java_binary/java_library
+               |# `deps` sections in the BUILD/BUILD.bazel file for project: ${project.name}
+               |#######################
+               |
+               |java_library(
+               |    name = "${project.name}",
+               |    deps = glob
+               |    deps = [""".stripMargin
+          )
+          deps.map(_.coordinates.packageQualifiedBazelName).toSeq.sorted.foreach(root => {
+            System.err.println(s"""        "$root",""")
+          })
+          System.err.println(
+            """    ]
+              |)
+              |""".stripMargin
+          )
+        }
+
     super.close()
   }
 
   private def thirdPartyDotBzl(mavenDependencies: MavenDependencies) = {
+    val thirdPartyDeps = mavenDependencies.thirdParty.toSeq.sorted
+
     w.println(
       s"""
          |# `generated_maven_jars()` is designed to be executed this within your module's WORKSPACE file, like:
@@ -110,11 +125,10 @@ final case class BazelPrinter(w: PrintWriter) extends DependencyPrinter(w) {
          |def generated_maven_jars():
          |""".stripMargin
     )
-    mavenDependencies.all.foreach(mavenDependency => {
-      val name = bazelName(mavenDependency)
+    thirdPartyDeps.foreach(mavenDependency => {
       w.println(
         s"""  native.maven_jar(
-           |      name = "$name",
+           |      name = "${mavenDependency.coordinates.bazelName}",
            |      artifact = "${mavenDependency.coordinates}",
            |  )
            |""".stripMargin
@@ -132,8 +146,8 @@ final case class BazelPrinter(w: PrintWriter) extends DependencyPrinter(w) {
          |""".stripMargin
     )
 
-    def nativeJavaLibrary(mavenDependency: MavenDependency) = {
-      val name = bazelName(mavenDependency)
+    def nativeJavaLibrary(mavenDependency: MavenDependency): Unit = {
+      val name = mavenDependency.coordinates.bazelName
       w.println(
         s"""  native.java_library(
            |      name = "$name",
@@ -143,10 +157,12 @@ final case class BazelPrinter(w: PrintWriter) extends DependencyPrinter(w) {
       )
 
       def dependencyNames(mavenDependency: MavenDependency): Set[String] =
-        Set(bazelName(mavenDependency)) ++ mavenDependency.dependsOn.flatMap(dependencyNames)
+        Set(mavenDependency.coordinates.bazelName) ++ mavenDependency.dependsOn.flatMap(dependencyNames)
 
       mavenDependency.dependsOn
           .flatMap(dependencyNames)
+          .toSeq
+          .sorted
           .foreach(dependencyName => w.println(s"""          ":$dependencyName","""))
 
       w.println(
@@ -157,37 +173,33 @@ final case class BazelPrinter(w: PrintWriter) extends DependencyPrinter(w) {
     }
 
     // Spit out "leaves" first
-    mavenDependencies.all
+    thirdPartyDeps
         .filter(_.dependsOn.isEmpty)
         .foreach(nativeJavaLibrary)
 
-    mavenDependencies.all
+    thirdPartyDeps
         .filter(_.dependsOn.nonEmpty)
         .foreach(nativeJavaLibrary)
   }
-  
-
-  private def bazelName(mavenDependency: MavenDependency): String = (
-      mavenDependency.coordinates.group.split("[-\\.]").toList ++
-          mavenDependency.coordinates.artifact.split("[-\\.]").toList
-      ).mkString("_")
 }
 
 final case class RawPrinter(w: PrintWriter) extends DependencyPrinter(w) {
-  override def printHeader() = {}
-  override def print(d: Dependency) = w.println(d)
+  override def printHeader(): Unit = {}
+  override def print(d: Dependency): Unit = w.println(d)
 }
 
 abstract class CsvPrinter(w: PrintWriter) extends DependencyPrinter(w) {
-  override def printHeader() = w.println("Dependency,Version,License,Notes")
+  override def printHeader(): Unit = w.println("Dependency,Version,License,Notes")
 
-  override def print(d: Dependency) = {
-    w.append('"')
-      .append(escapeQuotes(hyperlink(artifactVersionsUrl(d), d.group + ":" + d.artifact)))
-      .append("\", \"")
-      .append(escapeQuotes(hyperlink(versionDetailsUrl(d), d.version)))
-      .append("\", ,")
-      .println()
+  override def print(d: Dependency): Unit = d match {
+    case a: ArtifactDependency =>
+      w.append('"')
+          .append(escapeQuotes(hyperlink(artifactVersionsUrl(d), a.group + ":" + a.artifact)))
+          .append("\", \"")
+          .append(escapeQuotes(hyperlink(versionDetailsUrl(d), a.version)))
+          .append("\", ,")
+          .println()
+    case _ =>
   }
 
   def hyperlink(href: String, text: String): String
@@ -203,20 +215,22 @@ final case class GoogleDocsCsvPrinter(w: PrintWriter) extends CsvPrinter(w) {
 }
 
 final case class ConfluencePrinter(w: PrintWriter) extends DependencyPrinter(w) {
-  override def printHeader() = w.println("||Dependency||Version||License||Notes||")
+  override def printHeader(): Unit = w.println("||Dependency||Version||License||Notes||")
 
-  override def print(d: Dependency) = {
-    w.append("| [")
-      .append(d.group)
-      .append(":")
-      .append(d.artifact)
-      .append("|")
-      .append(artifactVersionsUrl(d))
-      .append("] | [")
-      .append(d.version)
-      .append("|")
-      .append(versionDetailsUrl(d))
-      .append("] | | |")
-      .println()
+  override def print(d: Dependency): Unit = d match {
+    case a: ArtifactDependency =>
+      w.append("| [")
+          .append(a.group)
+          .append(":")
+          .append(a.artifact)
+          .append("|")
+          .append(artifactVersionsUrl(d))
+          .append("] | [")
+          .append(a.version)
+          .append("|")
+          .append(versionDetailsUrl(d))
+          .append("] | | |")
+          .println()
+    case _ =>
   }
 }
