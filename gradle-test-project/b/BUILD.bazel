@@ -1,0 +1,10 @@
+package(default_visibility = ["//visibility:public"])
+
+java_library(
+    name = "b",
+    srcs = glob(["src/main/java/**/*.java"]),
+    deps = [
+        "//a:a",
+        "//third_party:org_ini4j_ini4j"
+    ]
+)
