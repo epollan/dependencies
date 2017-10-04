@@ -121,7 +121,9 @@ final case class GradleParser(lines: Iterator[String]) extends Parser with Parse
   }
 
   private object GradleConfiguration {
-    private val pattern = Pattern.compile("(?<configuration>\\S+) - .*")
+    // match "SOME_CONFIG - Dependencies for source set 'xyz'", but not
+    // "(*) - dependencies omitted (listed previously)"
+    private val pattern = Pattern.compile("(?<configuration>[^\\(\\s]+) - .*")
 
     def parse(project: Project, line: String): Option[Configuration] = {
       val matcher = pattern.matcher(line)

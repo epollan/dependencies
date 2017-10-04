@@ -96,7 +96,7 @@ final case class BazelPrinter(w: PrintWriter) extends DependencyPrinter(w) {
                |
                |java_library(
                |    name = "${project.name}",
-               |    deps = glob
+               |    srcs = glob(["src/main/java/**/*.java"]),
                |    deps = [""".stripMargin
           )
           deps.map(_.coordinates.packageQualifiedBazelName).toSeq.sorted.foreach(root => {
