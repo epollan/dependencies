@@ -44,10 +44,13 @@ object ModelFactory {
     val roots: Set[(ProjectCoordinates, MavenDependency)] = dependencies
         .filter(_.neededBy.isEmpty)
         .map(d => (ProjectCoordinates(d.configuration.project.name), d.coordinates))
-        .map(t => (t._1, mavenDependency(t._2, dependentToDependencies))).toSet
+        .map(t => (t._1, mavenDependency(t._2, dependentToDependencies)))
+        .toSet
 
     /**
-      * Set of all unique third-party dependencies in the entire transitive dependency graph for all projects
+      * Set of all unique third-party dependencies in the entire transitive dependency graph for all projects.
+      * Take this opportunity to also squash dependencies for the same artifact at different versions
+      * down to a single version (the highest).
       */
     val thirdParty: Set[MavenDependency] = {
       def flattenDependencies(root: MavenDependency): Seq[MavenDependency] =
@@ -58,6 +61,17 @@ object ModelFactory {
         }
 
       roots.flatMap(t => flattenDependencies(t._2))
+          .groupBy(d => d.coordinates match {
+            case m: MavenArtifactCoordinates => m.artifact
+            case _ => throw new IllegalStateException("Should not see non-maven coordinates here: " + d.coordinates)
+          })
+          .values
+          .flatMap(versionedDependencies => versionedDependencies.size match {
+            case 0 => Seq()
+            case 1 => Seq(versionedDependencies.head)
+            case _ => Seq(versionedDependencies.maxBy(_.coordinates.asInstanceOf[MavenArtifactCoordinates].semanticVersion))
+          })
+          .toSet
     }
 
     MavenDependencies(

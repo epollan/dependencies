@@ -1,10 +1,15 @@
-package(default_visibility = ["//visibility:public"])
+#######################
+# Copy the following snippet into any applicable java_binary/java_library
+# `deps` sections in the BUILD/BUILD.bazel file for project: b
+#######################
 
+package(default_visibility = ["//visibility:public"])
 java_library(
     name = "b",
     srcs = glob(["src/main/java/**/*.java"]),
     deps = [
         "//a:a",
-        "//third_party:org_ini4j_ini4j"
+        "//third_party:org_ini4j_ini4j",
     ]
 )
+

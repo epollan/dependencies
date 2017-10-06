@@ -45,7 +45,8 @@ object CLI extends App {
           case "csv" => printerFactory = GoogleDocsCsvPrinter
           case "confluence" => printerFactory = ConfluencePrinter
           case "raw" => printerFactory = RawPrinter
-          case "bzl" | "bazel" => printerFactory = BazelPrinter
+          case "bzl" | "bazel" => printerFactory = (lines) => BazelPrinter(lines)
+          case "bzl-force" | "bazel-force" => printerFactory = (lines) => BazelPrinter(lines, writeFiles = true)
           case _ => println(s"Unknown output format: $f"); usage()
         }
       case "--verbose" | "-v" =>
@@ -67,7 +68,7 @@ object CLI extends App {
         None
     })
     .flatten  // eliminate None and extract raw Dependencies
-    .toSet    // unique-ify
+//    .toSet    // unique-ify
     .toSeq
     .sorted
     .foreach(d => printer.print(d))

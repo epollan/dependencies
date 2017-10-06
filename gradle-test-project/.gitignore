@@ -1,0 +1,4 @@
+build
+bazel-*
+gradle-wrapper.jar
+.gradle

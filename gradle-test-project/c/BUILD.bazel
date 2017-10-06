@@ -1,16 +1,15 @@
+#######################
+# Copy the following snippet into any applicable java_binary/java_library
+# `deps` sections in the BUILD/BUILD.bazel file for project: c
+#######################
+
+package(default_visibility = ["//visibility:public"])
 java_library(
     name = "c",
     srcs = glob(["src/main/java/**/*.java"]),
     deps = [
         "//b:b",
-        "//third_party:org_apache_commons_commons_lang3"
+        "//third_party:org_apache_commons_commons_lang3",
     ]
 )
 
-java_binary(
-    name = "cli",
-    main_class = "C",
-    runtime_deps = [
-        "//c:c"
-    ]
-)	

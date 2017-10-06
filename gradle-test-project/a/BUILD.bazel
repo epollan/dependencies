@@ -1,5 +1,9 @@
-package(default_visibility = ["//visibility:public"])
+#######################
+# Copy the following snippet into any applicable java_binary/java_library
+# `deps` sections in the BUILD/BUILD.bazel file for project: a
+#######################
 
+package(default_visibility = ["//visibility:public"])
 java_library(
     name = "a",
     srcs = glob(["src/main/java/**/*.java"]),
@@ -7,3 +11,4 @@ java_library(
         "//third_party:com_google_guava_guava",
     ]
 )
+

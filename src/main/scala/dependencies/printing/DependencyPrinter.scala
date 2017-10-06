@@ -1,6 +1,7 @@
 package dependencies.printing
 
-import java.io.PrintWriter
+import java.io._
+import java.nio.file.{Path, Paths}
 
 import dependencies.ModelFactory
 import dependencies.model.{MavenArtifactCoordinates, MavenDependencies, MavenDependency, ProjectCoordinates}
@@ -48,8 +49,9 @@ abstract class DependencyPrinter(w: PrintWriter) {
   *   )
   * }}}
   */
-final case class BazelPrinter(w: PrintWriter) extends DependencyPrinter(w) {
+final case class BazelPrinter(w: PrintWriter, writeFiles: Boolean = false) extends DependencyPrinter(w) {
   val dependencies: mutable.MutableList[Dependency] = mutable.MutableList()
+  val resources: mutable.MutableList[AutoCloseable] = mutable.MutableList()
 
   override def printHeader(): Unit = {}
 
@@ -59,12 +61,13 @@ final case class BazelPrinter(w: PrintWriter) extends DependencyPrinter(w) {
   override def close(): Unit = {
     val mavenDependencies = ModelFactory.forParseResult(dependencies)
 
-    w.println("#######################")
-    w.println("# Generated and designed to be cat'ed into <root>/third_party.bzl")
-    w.println("#######################")
-    thirdPartyDotBzl(mavenDependencies)
+    val thirdPartyDotBzlStream = printStreamFor(Paths.get(".", "third_party.bzl"))
+    thirdPartyDotBzlStream.println("#######################")
+    thirdPartyDotBzlStream.println("# Generated and designed to be cat'ed into <root>/third_party.bzl")
+    thirdPartyDotBzlStream.println("#######################")
+    thirdPartyDotBzl(mavenDependencies, thirdPartyDotBzlStream)
 
-    System.err.println(
+    printStreamFor(Paths.get(".", "WORKSPACE")).println(
       """#######################
         |# Copy the following content into <root>/WORKSPACE:
         |#######################
@@ -74,9 +77,9 @@ final case class BazelPrinter(w: PrintWriter) extends DependencyPrinter(w) {
       """.stripMargin
     )
 
-    System.err.println(
+    printStreamFor(Paths.get("third_party", "BUILD.bazel")).println(
       """#######################
-        |# Copy the following content into <root>/third_party/BUILD:
+        |# Copy the following content into <root>/third_party/BUILD.bazel:
         |#######################
         |
         |package(default_visibility = ["//visibility:public"])
@@ -88,34 +91,66 @@ final case class BazelPrinter(w: PrintWriter) extends DependencyPrinter(w) {
     mavenDependencies.roots.toSeq
         .sortBy { case (project: ProjectCoordinates, _: Set[MavenDependency]) => project.name }
         .foreach { case (project: ProjectCoordinates, deps: Set[MavenDependency]) =>
-          System.err.println(
+          val projectStream = printStreamForProject(project)
+          projectStream.println(
             s"""#######################
                |# Copy the following snippet into any applicable java_binary/java_library
                |# `deps` sections in the BUILD/BUILD.bazel file for project: ${project.name}
                |#######################
                |
+               |package(default_visibility = ["//visibility:public"])
                |java_library(
                |    name = "${project.name}",
                |    srcs = glob(["src/main/java/**/*.java"]),
                |    deps = [""".stripMargin
           )
           deps.map(_.coordinates.packageQualifiedBazelName).toSeq.sorted.foreach(root => {
-            System.err.println(s"""        "$root",""")
+            projectStream.println(s"""        "$root",""")
           })
-          System.err.println(
+          projectStream.println(
             """    ]
               |)
               |""".stripMargin
           )
         }
 
+    resources.foreach(_.close)
     super.close()
   }
 
-  private def thirdPartyDotBzl(mavenDependencies: MavenDependencies) = {
+  private def printStreamForProject(project: ProjectCoordinates): PrintStream = {
+    if (!writeFiles) {
+      return System.err
+    }
+    printStreamFor(project.relativeProjectPath.resolve("BUILD.bazel"))
+  }
+
+  private def printStreamFor(path: Path): PrintStream = {
+    if (!writeFiles) {
+      return System.err
+    }
+
+    val target = path.toAbsolutePath.toFile
+    val dir = target.getParentFile
+    if (dir == null || !dir.exists()) {
+      throw new IllegalStateException(s"Could not write a file to $target since the directory $dir does not exist")
+    }
+    if (target.exists()) {
+      val bak = new File(target.getParent, s"${target.getName}.bak")
+      if (!target.renameTo(bak)) {
+        throw new IllegalStateException(s"Could not rename $target to $bak")
+      }
+    }
+
+    val stream = new PrintStream(new FileOutputStream(target))
+    resources.+=(stream)
+    stream
+  }
+
+  private def thirdPartyDotBzl(mavenDependencies: MavenDependencies, printStream: PrintStream) = {
     val thirdPartyDeps = mavenDependencies.thirdParty.toSeq.sorted
 
-    w.println(
+    printStream.println(
       s"""
          |# `generated_maven_jars()` is designed to be executed this within your module's WORKSPACE file, like:
          |#
@@ -126,7 +161,7 @@ final case class BazelPrinter(w: PrintWriter) extends DependencyPrinter(w) {
          |""".stripMargin
     )
     thirdPartyDeps.foreach(mavenDependency => {
-      w.println(
+      printStream.println(
         s"""  native.maven_jar(
            |      name = "${mavenDependency.coordinates.bazelName}",
            |      artifact = "${mavenDependency.coordinates}",
@@ -135,7 +170,7 @@ final case class BazelPrinter(w: PrintWriter) extends DependencyPrinter(w) {
       )
     })
 
-    w.println(
+    printStream.println(
       s"""
          |# `generated_java_libraries()` is designed to be executed within `third_party/BUILD`
          |#
@@ -148,7 +183,7 @@ final case class BazelPrinter(w: PrintWriter) extends DependencyPrinter(w) {
 
     def nativeJavaLibrary(mavenDependency: MavenDependency): Unit = {
       val name = mavenDependency.coordinates.bazelName
-      w.println(
+      printStream.println(
         s"""  native.java_library(
            |      name = "$name",
            |      visibility = ["//visibility:public"],
@@ -163,9 +198,9 @@ final case class BazelPrinter(w: PrintWriter) extends DependencyPrinter(w) {
           .flatMap(dependencyNames)
           .toSeq
           .sorted
-          .foreach(dependencyName => w.println(s"""          ":$dependencyName","""))
+          .foreach(dependencyName => printStream.println(s"""          ":$dependencyName","""))
 
-      w.println(
+      printStream.println(
         s"""      ]
            |  )
            |""".stripMargin

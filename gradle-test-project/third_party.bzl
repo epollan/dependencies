@@ -11,37 +11,37 @@ def generated_maven_jars():
 
   native.maven_jar(
       name = "com_google_code_findbugs_jsr305",
-      artifact = "com.google.code.findbugs:jsr305:1.3.9",
+      artifact = "com.google.code.findbugs:com.google.code.findbugs:1.3.9",
   )
 
   native.maven_jar(
       name = "com_google_errorprone_error_prone_annotations",
-      artifact = "com.google.errorprone:error_prone_annotations:2.0.18",
+      artifact = "com.google.errorprone:com.google.errorprone:2.0.18",
   )
 
   native.maven_jar(
       name = "com_google_guava_guava",
-      artifact = "com.google.guava:guava:23.0",
+      artifact = "com.google.guava:com.google.guava:23.0",
   )
 
   native.maven_jar(
       name = "com_google_j2objc_j2objc_annotations",
-      artifact = "com.google.j2objc:j2objc-annotations:1.1",
+      artifact = "com.google.j2objc:com.google.j2objc:1.1",
   )
 
   native.maven_jar(
       name = "org_apache_commons_commons_lang3",
-      artifact = "org.apache.commons:commons-lang3:3.0.1",
+      artifact = "org.apache.commons:org.apache.commons:3.0.1",
   )
 
   native.maven_jar(
       name = "org_codehaus_mojo_animal_sniffer_annotations",
-      artifact = "org.codehaus.mojo:animal-sniffer-annotations:1.14",
+      artifact = "org.codehaus.mojo:org.codehaus.mojo:1.14",
   )
 
   native.maven_jar(
       name = "org_ini4j_ini4j",
-      artifact = "org.ini4j:ini4j:0.5.2",
+      artifact = "org.ini4j:org.ini4j:0.5.2",
   )
 
 

@@ -1,2 +1,7 @@
+#######################
+# Copy the following content into <root>/WORKSPACE:
+#######################
+
 load("//:third_party.bzl", "generated_maven_jars")
 generated_maven_jars()
+      

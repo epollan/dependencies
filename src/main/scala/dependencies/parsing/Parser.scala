@@ -56,53 +56,56 @@ final case class GradleParser(lines: Iterator[String]) extends Parser with Parse
 
   protected def consumeNextToken(): Option[DependencyTreeToken] = {
     currentToken match {
+
       case None =>
         return Some(Preamble())
 
-      case Some(Preamble()) =>
-        while (parsedLines.hasNext) {
-          val line = parsedLines.next()
-          val project = parse(classOf[Preamble], GradleProject.parse(line))
-          if (project.isDefined) {
-            return project
-          }
-        }
+      case Some(_) =>
+        currentToken.get match {
 
-      case p @ Some(Project(_)) =>
-        val project = p.asInstanceOf[Some[Project]].get
-        while (parsedLines.hasNext) {
-          val line = parsedLines.next()
-          val configuration = parse(classOf[Project], GradleConfiguration.parse(project, line))
-          if (configuration.isDefined) {
-            return configuration
-          }
-        }
+          case preamble: Preamble =>
+            while (parsedLines.hasNext) {
+              val line = parsedLines.next()
+              val project = parse(classOf[Preamble], GradleProject.parse(line))
+              if (project.isDefined) {
+                return project
+              }
+            }
 
-      case c @ Some(Configuration(_, _)) =>
-        val config = c.asInstanceOf[Some[Configuration]].get
-        while (parsedLines.hasNext) {
-          val line = parsedLines.next()
-          val state = parse(classOf[Configuration], GradleDependency.parse(config, None, line))
-            .orElse(parse(classOf[Configuration], GradleConfiguration.parse(config.project, line)))
-          if (state.isDefined) {
-            return state
-          } 
-        }
+          case project: Project =>
+            while (parsedLines.hasNext) {
+              val line = parsedLines.next()
+              val configuration = parse(classOf[Project], GradleConfiguration.parse(project, line))
+              if (configuration.isDefined) {
+                return configuration
+              }
+            }
 
-      case d @ (Some(ArtifactDependency(_, _, _, _, _, _)) | Some(ProjectDependency(_, _, _, _))) =>
-        val dep = d.asInstanceOf[Some[Dependency]]
-        val parseState = dep.get.getClass
-        while (parsedLines.hasNext) {
-          val line = parsedLines.next()
-          val state = parse(parseState, GradleDependency.parse(dep.get.configuration, dep, line))
-            .orElse(parse(parseState, GradleConfiguration.parse(dep.get.configuration.project, line)))
-              .orElse(parse(parseState, GradleProject.parse(line)))
-          if (state.isDefined) {
-            return state
-          }
-        }
+          case config: Configuration =>
+            while (parsedLines.hasNext) {
+              val line = parsedLines.next()
+              val state = parse(classOf[Configuration], GradleDependency.parse(config, None, line))
+                  .orElse(parse(classOf[Configuration], GradleConfiguration.parse(config.project, line)))
+                  .orElse(parse(classOf[Configuration], GradleProject.parse(line)))
+              if (state.isDefined) {
+                return state
+              }
+            }
 
-      case _ => throw new IllegalStateException("Unexpected parse state")
+          case dep: Dependency =>
+            val parseState = dep.getClass
+            while (parsedLines.hasNext) {
+              val line = parsedLines.next()
+              val state = parse(parseState, GradleDependency.parse(dep.configuration, Some(dep), line))
+                  .orElse(parse(parseState, GradleConfiguration.parse(dep.configuration.project, line)))
+                  .orElse(parse(parseState, GradleProject.parse(line)))
+              if (state.isDefined) {
+                return state
+              }
+            }
+
+          case _ => throw new IllegalStateException("Unexpected parse state")
+        }
     }
     None
   }
@@ -147,7 +150,7 @@ final case class GradleParser(lines: Iterator[String]) extends Parser with Parse
         "(" +
         s"((?<group>[^:]+):(?<artifact>[^:]+):((($version)|($upgradedVersion))(?: \\(\\*\\))?))" +
         "|" +
-        "(project :(?<project>.*))" +
+        "(project :(?<project>[^\\s]+)(?: \\(\\*\\))?)" +
         ")"
     )
 

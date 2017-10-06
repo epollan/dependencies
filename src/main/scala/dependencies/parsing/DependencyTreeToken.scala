@@ -3,7 +3,7 @@ package dependencies.parsing
 import java.util.Comparator
 
 import com.google.common.collect.ComparisonChain
-import dependencies.model.{ArtifactCoordinates, MavenArtifactCoordinates, ProjectCoordinates}
+import dependencies.model.{ArtifactCoordinates, MavenArtifact, MavenArtifactCoordinates, ProjectCoordinates}
 
 sealed abstract class DependencyTreeToken()
 
@@ -54,6 +54,7 @@ abstract class Dependency(val configuration: Configuration,
   val name: String = coordinates.toString
 
   override def compare(that: Dependency): Int = ComparisonChain.start()
+      .compare(getClass.getSimpleName, that.getClass.getSimpleName)
       .compare(name, that.name)
       .compare(neededBy, that.neededBy, new Comparator[Option[Dependency]] {
         override def compare(left: Option[Dependency], right: Option[Dependency]): Int = (left, right) match {
@@ -89,4 +90,4 @@ final case class ArtifactDependency(override val configuration: Configuration,
                                     artifact: String,
                                     version: String,
                                     override val neededBy: Option[Dependency])
-    extends Dependency(configuration, depth, neededBy, MavenArtifactCoordinates(group, artifact, version))
+    extends Dependency(configuration, depth, neededBy, MavenArtifactCoordinates(MavenArtifact(group, artifact), version))
