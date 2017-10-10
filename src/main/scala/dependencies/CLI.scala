@@ -11,17 +11,23 @@ object CLI extends App {
   // Initial state
   private var maxDepth: Option[Int] = None
   private var conf: Option[String] = None
+  private var repoServerName = "spredfast"
   private var parserFactory: (Iterator[String] => Parser) = GradleParser
   private var printerFactory: (PrintWriter => DependencyPrinter) = RawPrinter
   private val arg = new AtomicInteger(0)
 
   private def usage() {
-    println("Usage: <dependency list command> | java -jar target/scala-2.11/*one-jar.jar [options]")
-    println(s"  --max-depth/-d                             max dependency 'depth', defaults to $maxDepth")
-    println(s"  --configuration/-c                         specific configuration from which dependencies should be taken")
-    println(s"  --format/-f (gradle)                       dependency listing format, defaults to gradle")
-    println(s"  --output/-o (csv|confluence|raw|bzl|bazel) output format, defaults to 'raw'")
-    println(s"  --verbose/-v                               flag that triggers verbose parsing")
+    println(
+      s"""Usage: <dependency list command> | java -jar target/scala-2.11/*one-jar.jar [options]")
+         |  --verbose/-v                                    flag that triggers verbose parsing
+         |  --max-depth/-d DEPTH                            max dependency 'depth', defaults to $maxDepth"
+         |  --configuration/-c CONFIG                       specific configuration from which dependencies should be taken
+         |  --format/-f (gradle)                            dependency listing format, defaults to gradle
+         |  --output/-o (raw|bzl|bazel|bzl-file|bazel-file) output format, defaults to 'raw'.
+         |                                                  'bzl' writes to stdout/stderr;
+         |                                                  'bzl-file' writes to BUILD/WORKSPACE/etc.
+         |  --repo/-r REPO_SERVER                           name of the Maven repo server, defaults to 'spredfast'
+         |""".stripMargin)
     sys.exit(1)
   }
 
@@ -45,12 +51,14 @@ object CLI extends App {
           case "csv" => printerFactory = GoogleDocsCsvPrinter
           case "confluence" => printerFactory = ConfluencePrinter
           case "raw" => printerFactory = RawPrinter
-          case "bzl" | "bazel" => printerFactory = (lines) => BazelPrinter(lines)
-          case "bzl-force" | "bazel-force" => printerFactory = (lines) => BazelPrinter(lines, writeFiles = true)
+          case "bzl" | "bazel" => printerFactory = (lines) => BazelPrinter(lines, repoServerName)
+          case "bzl-file" | "bazel-file" => printerFactory = (lines) => BazelPrinter(lines, repoServerName, writeFiles = true)
           case _ => println(s"Unknown output format: $f"); usage()
         }
       case "--verbose" | "-v" =>
         ParseLogging.verbose = true
+      case "--repo" | "-r" =>
+        repoServerName = shift()
       case "--help" | "-h" | _ => usage()
     }
     arg.incrementAndGet()
@@ -67,8 +75,7 @@ object CLI extends App {
       case _ =>
         None
     })
-    .flatten  // eliminate None and extract raw Dependencies
-//    .toSet    // unique-ify
+    .flatten
     .toSeq
     .sorted
     .foreach(d => printer.print(d))

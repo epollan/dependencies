@@ -1,8 +1,10 @@
 package dependencies.model
 
 import java.nio.file.{Path, Paths}
+import java.util.Comparator
 import java.util.regex.Pattern
 
+import com.google.common.base.Strings
 import com.google.common.collect.ComparisonChain
 
 abstract class ArtifactCoordinates extends Ordered[ArtifactCoordinates] {
@@ -18,14 +20,29 @@ abstract class ArtifactCoordinates extends Ordered[ArtifactCoordinates] {
 
 
 object SemanticVersion {
-  private val majorMinorPatch = Pattern.compile("(?<major>[^\\.]+)\\.(?<minor>[^\\.]+)\\.(?<patch>.*)")
+  private val majorMinorPatch = Pattern.compile("(?<major>[^\\.]+)(\\.(?<minor>[^\\.]+)(\\.(?<patch>.*))?)?")
 
   def apply(version: String): SemanticVersion = {
     val matcher = majorMinorPatch.matcher(version)
     if (matcher.matches()) {
-      SemanticVersion(matcher.group("major"), matcher.group("minor"), matcher.group("patch"))
+      SemanticVersion(
+        matcher.group("major"),
+        Strings.nullToEmpty(matcher.group("minor")),
+        Strings.nullToEmpty(matcher.group("patch"))
+      )
     } else {
+      System.err.println(s"Couldn't cleanly parse semantic version: $version")
       SemanticVersion(version, "", "")
+    }
+  }
+
+  private def comparatorForField(parsedGetter: (SemanticVersion) => Option[java.lang.Long],
+                                 rawGetter: (SemanticVersion) => String): Comparator[SemanticVersion] = {
+    new Comparator[SemanticVersion] {
+      override def compare(o1: SemanticVersion, o2: SemanticVersion): Int =
+        parsedGetter(o1).map(v => v.compareTo(parsedGetter(o2).getOrElse(-1L)))
+            .orElse(Some(rawGetter(o1).compareTo(rawGetter(o2))))
+            .get
     }
   }
 }
@@ -34,11 +51,21 @@ object SemanticVersion {
 case class SemanticVersion(major: String, minor: String, patch: String)
     extends Ordered[SemanticVersion] {
 
+  private lazy val majorVersionNumber = parse(major)
+  private lazy val minorVersionNumber = parse(minor)
+  private lazy val patchVersionNumber = parse(patch)
+
   override def compare(that: SemanticVersion): Int = ComparisonChain.start()
-      .compare(major, that.major)
-      .compare(minor, that.minor)
-      .compare(patch, that.patch)
+      .compare(this, that, SemanticVersion.comparatorForField(_.majorVersionNumber, _.major))
+      .compare(this, that, SemanticVersion.comparatorForField(_.minorVersionNumber, _.minor))
+      .compare(this, that, SemanticVersion.comparatorForField(_.patchVersionNumber, _.patch))
       .result()
+
+  private def parse(versionString: String): Option[java.lang.Long] = try {
+    Some(java.lang.Long.parseLong(versionString))
+  } catch {
+    case _: NumberFormatException => None
+  }
 }
 
 
@@ -57,7 +84,7 @@ sealed case class MavenArtifactCoordinates(artifact: MavenArtifact, version: Str
 
   override lazy val packageQualifiedBazelName: String = "//third_party:" + bazelName
 
-  override def toString: String = s"${artifact.groupId}:${artifact.groupId}:$version"
+  override def toString: String = s"${artifact.groupId}:${artifact.artifactId}:$version"
 }
 
 

@@ -49,7 +49,9 @@ abstract class DependencyPrinter(w: PrintWriter) {
   *   )
   * }}}
   */
-final case class BazelPrinter(w: PrintWriter, writeFiles: Boolean = false) extends DependencyPrinter(w) {
+final case class BazelPrinter(w: PrintWriter,
+                              repoServer: String,
+                              writeFiles: Boolean = false) extends DependencyPrinter(w) {
   val dependencies: mutable.MutableList[Dependency] = mutable.MutableList()
   val resources: mutable.MutableList[AutoCloseable] = mutable.MutableList()
 
@@ -68,13 +70,22 @@ final case class BazelPrinter(w: PrintWriter, writeFiles: Boolean = false) exten
     thirdPartyDotBzl(mavenDependencies, thirdPartyDotBzlStream)
 
     printStreamFor(Paths.get(".", "WORKSPACE")).println(
-      """#######################
-        |# Copy the following content into <root>/WORKSPACE:
-        |#######################
-        |
-        |load("//:third_party.bzl", "generated_maven_jars")
-        |generated_maven_jars()
-      """.stripMargin
+      s"""#######################
+         |# Copy the following content into <root>/WORKSPACE:
+         |#
+         |# NOTE: this presupposes a ~/.m2/settings.xml file with credentials for a
+         |#       server named "$repoServer".  Your settings file may only have credentials for
+         |#       a "spredfast-repository" -- this name is not legal for a bazel `maven_server`
+         |#       object, so just duplicate the credentials into a server named "$repoServer".
+         |#######################
+         |maven_server(
+         |    name = "$repoServer",
+         |    url = "https://buildrepo.sf-ops.net/artifactory/sf-repo"
+         |)
+         |
+         |load("//:third_party.bzl", "generated_maven_jars")
+         |generated_maven_jars()
+          """.stripMargin
     )
 
     printStreamFor(Paths.get("third_party", "BUILD.bazel")).println(
@@ -89,8 +100,8 @@ final case class BazelPrinter(w: PrintWriter, writeFiles: Boolean = false) exten
     )
 
     mavenDependencies.roots.toSeq
-        .sortBy { case (project: ProjectCoordinates, _: Set[MavenDependency]) => project.name }
-        .foreach { case (project: ProjectCoordinates, deps: Set[MavenDependency]) =>
+        .sortBy { case (project: ProjectCoordinates, _: Set[MavenDependency[_]]) => project.name }
+        .foreach { case (project: ProjectCoordinates, deps: Set[MavenDependency[_]]) =>
           val projectStream = printStreamForProject(project)
           projectStream.println(
             s"""#######################
@@ -135,12 +146,6 @@ final case class BazelPrinter(w: PrintWriter, writeFiles: Boolean = false) exten
     if (dir == null || !dir.exists()) {
       throw new IllegalStateException(s"Could not write a file to $target since the directory $dir does not exist")
     }
-    if (target.exists()) {
-      val bak = new File(target.getParent, s"${target.getName}.bak")
-      if (!target.renameTo(bak)) {
-        throw new IllegalStateException(s"Could not rename $target to $bak")
-      }
-    }
 
     val stream = new PrintStream(new FileOutputStream(target))
     resources.+=(stream)
@@ -161,10 +166,12 @@ final case class BazelPrinter(w: PrintWriter, writeFiles: Boolean = false) exten
          |""".stripMargin
     )
     thirdPartyDeps.foreach(mavenDependency => {
+
       printStream.println(
         s"""  native.maven_jar(
            |      name = "${mavenDependency.coordinates.bazelName}",
            |      artifact = "${mavenDependency.coordinates}",
+           |      server = "$repoServer"
            |  )
            |""".stripMargin
       )
@@ -181,7 +188,7 @@ final case class BazelPrinter(w: PrintWriter, writeFiles: Boolean = false) exten
          |""".stripMargin
     )
 
-    def nativeJavaLibrary(mavenDependency: MavenDependency): Unit = {
+    def nativeJavaLibrary(mavenDependency: MavenDependency[MavenArtifactCoordinates]): Unit = {
       val name = mavenDependency.coordinates.bazelName
       printStream.println(
         s"""  native.java_library(
@@ -191,7 +198,7 @@ final case class BazelPrinter(w: PrintWriter, writeFiles: Boolean = false) exten
            |      runtime_deps = [""".stripMargin
       )
 
-      def dependencyNames(mavenDependency: MavenDependency): Set[String] =
+      def dependencyNames(mavenDependency: MavenDependency[MavenArtifactCoordinates]): Set[String] =
         Set(mavenDependency.coordinates.bazelName) ++ mavenDependency.dependsOn.flatMap(dependencyNames)
 
       mavenDependency.dependsOn

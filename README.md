@@ -46,3 +46,9 @@ getting access to transitively, you will run into compilation errors using `baze
 Transitive dependencies are modeled as _runtime_ dependencies in bazel.  If you
 directly code against classes in your gradle transitive dependencies, you must add
 those as direct dependencies of your bazel project.
+
+The `bzl-file` format will write directly to various files on the filesystem assuming
+that the tooling is being run _within_ a project being ported to bazel.  Files affected:
+* `BUILD.bazel` throughout the project
+* `WORKSPACE`
+* various `third_party`-related files & directories

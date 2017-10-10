@@ -1,7 +1,7 @@
 package dependencies.model
 
-case class MavenDependency(coordinates: ArtifactCoordinates,
-                           dependsOn: Set[MavenDependency])
-    extends Ordered[MavenDependency] {
-  override def compare(that: MavenDependency): Int = coordinates.compare(that.coordinates)
+case class MavenDependency[C <: ArtifactCoordinates](coordinates: C,
+                                                     dependsOn: Set[MavenDependency[C]])
+    extends Ordered[MavenDependency[C]] {
+  override def compare(that: MavenDependency[C]): Int = coordinates.compare(that.coordinates)
 }
