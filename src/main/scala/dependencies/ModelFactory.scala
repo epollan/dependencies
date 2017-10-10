@@ -22,7 +22,7 @@ object ModelFactory {
     */
   def forParseResult(dependencies: Seq[Dependency]): MavenDependencies = {
 
-    def mavenDependency(coordinates: ArtifactCoordinates, dependentToDependencies: Deps): MavenDependency = {
+    def mavenDependency(coordinates: ArtifactCoordinates, dependentToDependencies: Deps): MavenDependency[ArtifactCoordinates] = {
       MavenDependency(
         coordinates,
         dependentToDependencies.getOrElse(coordinates, Set())
@@ -41,7 +41,7 @@ object ModelFactory {
     /**
       * Root -- or "direct" -- dependencies of a module
       */
-    val roots: Set[(ProjectCoordinates, MavenDependency)] = dependencies
+    val roots: Set[(ProjectCoordinates, MavenDependency[ArtifactCoordinates])] = dependencies
         .filter(_.neededBy.isEmpty)
         .map(d => (ProjectCoordinates(d.configuration.project.name), d.coordinates))
         .map(t => (t._1, mavenDependency(t._2, dependentToDependencies)))
@@ -52,24 +52,24 @@ object ModelFactory {
       * Take this opportunity to also squash dependencies for the same artifact at different versions
       * down to a single version (the highest).
       */
-    val thirdParty: Set[MavenDependency] = {
-      def flattenDependencies(root: MavenDependency): Seq[MavenDependency] =
+    val thirdParty: Set[MavenDependency[MavenArtifactCoordinates]] = {
+      def flattenDependencies(root: MavenDependency[ArtifactCoordinates]): Seq[MavenDependency[MavenArtifactCoordinates]] =
         if (root.coordinates.isInstanceOf[MavenArtifactCoordinates]) {
-          Seq(root) ++ root.dependsOn.toSeq.flatMap(flattenDependencies)
+          Seq(root.asInstanceOf[MavenDependency[MavenArtifactCoordinates]]) ++ root.dependsOn.toSeq.flatMap(flattenDependencies)
         } else {
           root.dependsOn.toSeq.flatMap(flattenDependencies)
         }
-
+      
       roots.flatMap(t => flattenDependencies(t._2))
-          .groupBy(d => d.coordinates match {
-            case m: MavenArtifactCoordinates => m.artifact
-            case _ => throw new IllegalStateException("Should not see non-maven coordinates here: " + d.coordinates)
-          })
+          .groupBy(_.coordinates.artifact)
           .values
           .flatMap(versionedDependencies => versionedDependencies.size match {
             case 0 => Seq()
             case 1 => Seq(versionedDependencies.head)
-            case _ => Seq(versionedDependencies.maxBy(_.coordinates.asInstanceOf[MavenArtifactCoordinates].semanticVersion))
+            case _ =>
+              val newest = versionedDependencies.maxBy(_.coordinates.semanticVersion)
+              System.err.println(s"Pinning to latest version ${newest.coordinates.version} of ${newest.coordinates.artifact} from amongst versions: ${versionedDependencies.map(_.coordinates.version)}")
+              Seq(newest)
           })
           .toSet
     }
