@@ -57,6 +57,8 @@ object CLI extends App {
         }
       case "--verbose" | "-v" =>
         ParseLogging.verbose = true
+      case "--repo" | "-r" =>
+        repoServerName = shift()
       case "--help" | "-h" | _ => usage()
     }
     arg.incrementAndGet()
