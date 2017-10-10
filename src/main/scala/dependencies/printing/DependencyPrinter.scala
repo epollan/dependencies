@@ -165,6 +165,10 @@ final case class BazelPrinter(w: PrintWriter,
          |def generated_maven_jars():
          |""".stripMargin
     )
+
+    // NOTE: this might be supplanted by java_import_external when
+    // https://github.com/bazelbuild/bazel/commit/062fe70189fc622285833311d241021be313680b
+    // is released (sometime after 0.5.4)
     thirdPartyDeps.foreach(mavenDependency => {
 
       printStream.println(
